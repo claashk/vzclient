@@ -1,6 +1,5 @@
-import asyncio
+import json
 
-from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 from autobahn.wamp.types import EncodedPayload
 from autobahn.wamp.interfaces import IPayloadCodec
 
