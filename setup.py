@@ -43,7 +43,8 @@ setup(
         'setuptools',
         'sphinx',
         'sphinx-rtd-theme',
-        'autobahn'
+        'autobahn',
+        'requests'
     ],
     author='claashk',
     author_email='claashk@xxx',
