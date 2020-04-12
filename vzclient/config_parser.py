@@ -1,4 +1,6 @@
 import re
+import json
+
 
 multiline_comment = re.compile(r"/\*.*?\*/", re.MULTILINE|re.DOTALL)
 trailing_comment = re.compile(r"([\{\},\w])\s*//[^\"\n]*\n", re.MULTILINE)
