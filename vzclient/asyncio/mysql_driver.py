@@ -1,7 +1,6 @@
 import aiomysql as sql
 from collections import namedtuple
 from datetime import datetime, timedelta
-import logging
 
 Entity = namedtuple("Entity", ("id", "uuid", "type", "cls"))
 Entity.__doc__ = """Namedtuple for rows of the 'entities' table
@@ -13,7 +12,6 @@ Arguments:
     cls (str): Class column.
 """
 
-logger = logging.getLogger(__name__)
 
 Measurement = namedtuple("Measurement", ("id", "channel_id", "timestamp", "value"))
 Property = namedtuple("Property", ("id", "entity_id", "key", "value"))
@@ -213,9 +211,7 @@ class MySqlDriver(object):
 
         if offset is not None:
             query.append(f"OFFSET {offset:d}")
-        query = " ".join(query)
-        logger.debug(f"Posting query: {query}")
-        res = await self.query(query)
+        res = await self.query(" ".join(query))
         return res
 
     async def entities(self, **kwargs):
@@ -327,7 +323,6 @@ class MySqlDriver(object):
             chunk = await self.data(where=where,
                                     limit=limit,
                                     order="timestamp ASC")
-            logger.debug("Got chunk of size {}".format(len(chunk)))
             if not chunk:
                 return
 
