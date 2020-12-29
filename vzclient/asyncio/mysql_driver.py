@@ -1,7 +1,7 @@
 import aiomysql as sql
 from collections import namedtuple
 from datetime import datetime, timedelta
-from ..compress import Compressor
+import logging
 
 Entity = namedtuple("Entity", ("id", "uuid", "type", "cls"))
 Entity.__doc__ = """Namedtuple for rows of the 'entities' table
@@ -12,6 +12,8 @@ Arguments:
     type (str): Type of the channel or entity
     cls (str): Class column.
 """
+
+logger = logging.getLogger(__name__)
 
 Measurement = namedtuple("Measurement", ("id", "channel_id", "timestamp", "value"))
 Property = namedtuple("Property", ("id", "entity_id", "key", "value"))
@@ -43,7 +45,7 @@ def timestamp(t):
     return int(1000. * (t - EPOCH).total_seconds() + 0.5)
 
 
-class MySqlClient(object):
+class MySqlDriver(object):
     """Asynchronous MySQL client for the Volkszaehler database
 
     Can be used in an asynchronous with block.
@@ -56,18 +58,29 @@ class MySqlClient(object):
         charset (str): Character set to use. Defaults to "utf-8"
         **kwargs (dict): Keyword arguments passed verbatim to mysql.connect
     """
-    def __init__(self, host, user, password, db, charset="utf8", **kwargs):
-        self._parms=dict()
-        self._parms['host'] = host
-        self._parms['user'] = user
-        self._parms['password'] = password
-        self._parms['db'] = db
-        self._parms['charset'] = charset
-        self._parms.update(kwargs)
+    def __init__(self,
+                 host,
+                 user,
+                 secret=None,
+                 database=None,
+                 charset="utf8",
+                 **kwargs):
+        if secret is None:
+            secret = kwargs.pop("password", None)
+        if database is None:
+            database = kwargs.pop("db", "volkszaehler")
+        self._client_cfg = dict(host=host,
+                                user=user,
+                                password=secret,
+                                db=database,
+                                charset=charset,
+                                **kwargs)
         self._connection = None
         self._cursor = None
 
     async def __aenter__(self):
+        if self.is_connected:
+            raise RuntimeError("Client already in use")
         await self.connect()
         return self
 
@@ -90,9 +103,9 @@ class MySqlClient(object):
             **kwargs (dict): Keyword arguments used for the connection. These
                 arguments will override any arguments passed to init.
         """
-        self._parms.update(kwargs)
+        self._client_cfg.update(kwargs)
         await self.disconnect()
-        self._connection = await sql.connect(**self._parms)
+        self._connection = await sql.connect(**self._client_cfg)
         self._cursor = await self._connection.cursor()
 
     async def disconnect(self):
@@ -101,11 +114,61 @@ class MySqlClient(object):
             if self._cursor is not None and not self._cursor.closed:
                 await self._cursor.close()
             await self._connection.ensure_closed()
+        self._connection = None
+        self._cursor = None
 
     async def assert_connected(self):
         """Connect to the database if the client is not already connected"""
         if not self.is_connected:
             await self.connect()
+
+    def get_reader(self):
+        return self.get_client()
+
+    def get_writer(self):
+        client = self.get_client()
+        client.init_writer()
+        return client
+
+    def get_client(self):
+        if self.is_connected:
+            return MySqlDriver(**self._client_cfg)
+        return self
+
+    def init_writer(self):
+        raise NotImplementedError("Writer")
+
+    async def iter_chunks(self,
+                          channel,
+                          begin=None,
+                          end=None,
+                          chunk_size=8192):
+        if not self.is_connected:
+            raise RuntimeError("Reader not initialized")
+        channel_id = channel['id']
+        async for chunk in self.iter_measurements(channel_id,
+                                                  begin=begin,
+                                                  end=end,
+                                                  limit=chunk_size):
+            yield chunk
+        return
+
+    async def write_chunk(self, **kwargs):
+        raise NotImplementedError("write_chunks for mysql driver")
+
+    async def get_channels(self):
+        if not self.is_connected:
+            raise RuntimeError("Reader not initialized")
+        entities = await self.entities()
+        properties = []
+        for entity in entities:
+            p = await self.channel_properties(entity.id)
+            p.update(uuid=entity.uuid,
+                     cls=entity.cls,
+                     type=entity.type,
+                     id=entity.id)
+            properties.append(p)
+        return properties
 
     async def query(self, query, *args):
         """Query the database
@@ -138,20 +201,21 @@ class MySqlClient(object):
         Return:
             list: Query result
         """
-        query = ["SELECT * FROM {}".format(table)]
+        query = [f"SELECT * FROM {table}"]
         if where is not None:
-            query.append("WHERE {}".format(where))
+            query.append(f"WHERE {where}")
 
         if order:
-            query.append("ORDER BY {}".format(order))
+            query.append(f"ORDER BY {order}")
 
         if limit is not None:
-            query.append("LIMIT {:d}".format(limit))
+            query.append(f"LIMIT {limit:d}")
 
         if offset is not None:
-            query.append("OFFSET {:d}".format(offset))
-
-        res = await self.query(" ".join(query))
+            query.append(f"OFFSET {offset:d}")
+        query = " ".join(query)
+        logger.debug(f"Posting query: {query}")
+        res = await self.query(query)
         return res
 
     async def entities(self, **kwargs):
@@ -213,6 +277,17 @@ class MySqlClient(object):
             channels[properties[0].value] = e
         return channels
 
+    async def channel_properties(self, entity_id):
+        """Get information about a channel's properties
+
+        Returns:
+            dict: Dictionary with property title as key and associated property
+            as key.
+        """
+        i = int(entity_id)
+        properties = await self.properties(where=f"entity_id = {i}")
+        return {p.key: p.value for p in properties}
+
     async def iter_measurements(self, channel, begin=None, end=None, limit=512):
         """Iterate over measurements from a specific channel in chunks
 
@@ -231,59 +306,30 @@ class MySqlClient(object):
             list: One tuple containing timestamp and associated value per
             matching row.
         """
-        where = ["channel_id = {}".format(channel)]
-        if begin is not None:
-            where.append("AND timestamp >= {}".format(timestamp(begin)))
         if end is not None:
-            where.append("AND timestamp < {}".format(timestamp(end)))
+            t1 = timestamp(end) if isinstance(end, datetime) else int(end)
+            end_query = f" AND timestamp < {t1}"
+        else:
+            end_query = ""
+        where_const = f"channel_id = {channel}{end_query}"
 
-        where = " ".join(where)
-        offset = 0
+        # Do not use offset, as it is incredibly slow:
+        # https://www.eversql.com/faster-pagination-in-mysql-why-order-by-with-limit-and-offset-is-slow/
+        # channel_id, timestamp combination should be unique (forms an index)
+
+        if begin is not None:
+            t0 = timestamp(begin) if isinstance(begin, datetime) else int(end)
+            where = f"{where_const} AND timestamp >= {t0}"
+        else:
+            where = where_const
+
         while True:
             chunk = await self.data(where=where,
                                     limit=limit,
-                                    offset=offset,
                                     order="timestamp ASC")
-            n = len(chunk)
-            if n == 0:
+            logger.debug("Got chunk of size {}".format(len(chunk)))
+            if not chunk:
                 return
-            offset += n
+
             yield [(m.timestamp, m.value) for m in chunk]
-
-    async def compress_measurements(self,
-                                    channel,
-                                    begin=None,
-                                    end=None,
-                                    limit=1024,
-                                    max_gap=None):
-        """Compress measurements of a channel
-
-        Iterates over chunks of compressed measurements from a channel.
-
-        Arguments:
-            channel (int): ID of channel (as defined in entities table)
-            begin (int): Timestamp [ms since EPOCH]. If not ``None`` only
-               measurements with timestamp greater or equal this value are
-               returned. Defaults to ``None``.
-            end (int):   Timestamp [ms since EPOCH]. If not ``None`` only
-               measurements with timestamp smaller than this value are
-               returned. Defalts to ``None``.
-            limit (int): Chunk size. Determines the maximum number of
-                measurements returned per query. Defaults to 512.
-            max_gap (int): Maximum gap allowed between nodes in compressed
-               stream [ms]
-
-        Yields:
-            list: One tuple containing timestamp and associated value per
-            matching row in compressed time series.
-        """
-        compressor = Compressor(max_gap=max_gap)
-        ait = self.iter_measurements(channel, begin=begin, end=end, limit=limit)
-        try:
-            chunk = await ait.__anext__()
-        except StopAsyncIteration:
-            return
-        yield list(compressor.compress(compressor.iter(chunk)))
-        async for chunk in ait:
-            yield list(compressor.compress(chunk))
-        yield list(compressor.finalize())
+            where = f"{where_const} AND timestamp > {chunk[-1].timestamp}"
