@@ -44,7 +44,9 @@ setup(
         'sphinx',
         'sphinx-rtd-theme',
         'autobahn',
-        'requests'
+        'requests',
+        'aiomysql',
+        'aioinflux'
     ],
     author='claashk',
     author_email='claashk@xxx',
