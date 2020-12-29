@@ -5,8 +5,10 @@ from datetime import datetime
 import yaml
 import re
 
-from vzclient.asyncio import InfluxDriver, MySqlDriver, compress_const
-import vzclient.asyncio.transform as transform
+from .influx_driver import InfluxDriver
+from .mysql_driver import MySqlDriver
+from .compress import compress_const
+from . import transform
 
 
 logger = logging.getLogger("vzclient")
