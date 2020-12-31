@@ -13,6 +13,10 @@ from . import transform
 
 logger = logging.getLogger("vzclient")
 
+# TODO implement an incremental option, which queries the destination for the
+# latest timestamp available and copies only timestamps greater than this
+# value.
+
 
 class DatabaseCopy:
     """Copy implementation for channel information
@@ -26,8 +30,8 @@ class DatabaseCopy:
     while a writer should expose a ``write_chunk`` method.
 
     Arguments:
-        src (dict): Source driver configuration
-        dest (dict): Sink / destination driver configuration
+        source (dict): Source driver configuration
+        destination (dict): Sink / destination driver configuration
         includes (iterable): Iterable of dict-like objects. Each dict describes
             the input option of one channel to copy.
         excludes (dict): Dictionary containing various exclusion criteria.
@@ -124,7 +128,7 @@ class DatabaseCopy:
                 if trafo is not None:
                     gen = trafo(gen, **trafo_args)
             if max_gap is not None:
-                gen = compress_const(gen, max_gap)
+                gen = compress_const(gen, 1000 * max_gap) #max_gap[s] -> ms
 
             nmeas = 0
             async for chunk in gen:
