@@ -27,4 +27,9 @@ def timestamp(t):
 
 
 def now():
+    """Get current UTC time as timestamp
+
+    Return:
+        int: Timestamp [ms since EPOCH]
+    """
     return timestamp(datetime.utcnow())
