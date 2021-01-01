@@ -25,3 +25,6 @@ def timestamp(t):
     """
     return int(1000. * (t - EPOCH).total_seconds() + 0.5)
 
+
+def now():
+    return timestamp(datetime.utcnow())
