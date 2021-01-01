@@ -1,4 +1,3 @@
-from io import BytesIO
 import logging
 from aioinflux import InfluxDB2Client
 from aioinflux.serialization.common import escape, tag_escape
@@ -38,7 +37,7 @@ class InfluxDriver(object):
         self._prefix = b""
         self._buffer = None
         self._high_water_mark = 0
-        self._byte_count = 0
+        self._bytes_in_buffer = 0
 
     async def __aenter__(self):
         if self.is_connected:
@@ -128,19 +127,26 @@ class InfluxDriver(object):
         self._prefix = self.get_prefix(measurement=measurement,
                                        tags=tags,
                                        field_name=field_name)
-        self._buffer = BytesIO(bytes(buffer_size))
+        self._buffer = bytearray(buffer_size)
         max_line_len = len(self._prefix) + 2 * 32  # assume 32 char max per field
         self._high_water_mark = buffer_size - max_line_len
-        self._byte_count = 0
+        self._bytes_in_buffer = 0
 
     def init_reader(self):
         raise NotImplementedError("Reader")
 
     async def write_chunk(self, chunk):
         for t, x in chunk:
-            line = b"".join((self._prefix, f"{x} {t}\n".encode()))
-            self._byte_count += self._buffer.write(line)
-            if self._byte_count > self._high_water_mark:
+            first = self._bytes_in_buffer
+            last = first + len(self._prefix)
+            self._buffer[first:last] = self._prefix
+            self._bytes_in_buffer = last
+            first = last
+            rest = f"{x} {t}\n".encode()
+            last = first + len(rest)
+            self._buffer[first:last] = rest
+            self._bytes_in_buffer = last
+            if self._bytes_in_buffer > self._high_water_mark:
                 await self.flush_buffer()
 
     async def iter_chunks(self,
@@ -152,12 +158,11 @@ class InfluxDriver(object):
         raise NotImplementedError("read chunks for Influx driver")
 
     async def flush_buffer(self):
-        if self._byte_count > 0:
-            logger.debug(f"Flushing {self._byte_count} bytes to influx ...")
-            data = self._buffer.getvalue()[:self._byte_count]
+        if self._bytes_in_buffer > 0:
+            logger.debug(f"Flushing {self._bytes_in_buffer} bytes to influx ...")
+            data = self._buffer[:self._bytes_in_buffer]
             await self.insert(data=data)
-            self._buffer.seek(0)
-            self._byte_count = 0
+            self._bytes_in_buffer = 0
 
     @staticmethod
     def get_prefix(measurement, tags=None, field_name="value"):
