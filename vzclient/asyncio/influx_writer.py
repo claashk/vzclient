@@ -40,9 +40,10 @@ class InfluxWriter(object):
         self._stop = True
         done, pending = await asyncio.wait(self._tasks, timeout=timeout)
         if pending:
-            logger.debug(f"Killing {len(pending)} pending tasks ...")
-            cancel_all = [asyncio.ensure_future(t.cancel()) for t in pending]
-            done, pending = await asyncio.wait(cancel_all)
+            logger.debug(f"Cancelling {len(pending)} pending tasks ...")
+            for t in pending:
+                t.cancel()
+            done, pending = await asyncio.wait(pending)
             logger.warning(f"Unable to cancel {len(pending)} tasks")
         return
 
