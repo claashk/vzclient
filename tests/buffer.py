@@ -11,11 +11,13 @@ class BufferTestCase(unittest.TestCase):
         self.assertEqual(20, buf.capacity)
         self.assertEqual(18, buf.high_water_mark)
         self.assertEqual(0, len(buf))
+        self.assertFalse(buf)
 
         buf = Buffer(30, 29)
         self.assertEqual(30, buf.capacity)
         self.assertEqual(29, buf.high_water_mark)
         self.assertEqual(0, len(buf))
+        self.assertFalse(buf)
 
         self.assertRaises(ValueError, Buffer, 30, 31)
 
@@ -27,6 +29,7 @@ class BufferTestCase(unittest.TestCase):
         n = buf.write(b" World", b"!")
         self.assertEqual(7, n)
         self.assertEqual(12, len(buf))
+        self.assertTrue(buf)
 
         self.assertEqual(b"Hello World!", buf.data())
         self.assertFalse(buf.is_full())
@@ -37,6 +40,18 @@ class BufferTestCase(unittest.TestCase):
         self.assertTrue(buf.is_full())
         self.assertEqual(buf.capacity, len(buf))
         self.assertRaises(BufferError, buf.write, b"Overflow")
+
+    def test_clear(self):
+        buf = Buffer(20)
+        buf.write(b"Hello ", b"World", b"!")
+        self.assertEqual(b"Hello World!", buf.data())
+        buf.clear()
+        self.assertEqual(b"", buf.data())
+        self.assertFalse(buf)
+        buf.write(b"Good bye" b", folks!")
+        self.assertEqual(b"Good bye, folks!", buf.data())
+        self.assertTrue(buf)
+
 
 
 def suite():

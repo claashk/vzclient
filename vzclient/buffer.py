@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger("vzclient")
-
 
 class Buffer(object):
     """Simple binary buffer implementation
@@ -51,6 +47,14 @@ class Buffer(object):
         """Get number of bytes in buffer"""
         return self._bytes_in_buffer
 
+    def __bool__(self):
+        """Buffer evaluates to True if and only if it is not empty"""
+        return self._bytes_in_buffer > 0
+
+    def clear(self):
+        """Clear all content from buffer"""
+        self._bytes_in_buffer = 0
+
     def data(self):
         """Get a view of the data
 
@@ -76,6 +80,9 @@ class Buffer(object):
 
         Return:
             int: Total number of bytes written to buffer
+
+        Raise:
+            BufferError: If buffer capacity is exceeded
         """
         offset = self._bytes_in_buffer
         for x in args:
