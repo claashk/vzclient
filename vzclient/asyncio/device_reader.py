@@ -101,6 +101,7 @@ class DeviceReader(object):
 
     async def stop(self, max_retries=5):
         """Stop the reader and wait until the loop is complete"""
+        logger.debug(f"Stopping device reader {self.name} ...")
         if self._stop:
             return
         self._stop = True
