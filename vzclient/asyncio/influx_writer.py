@@ -14,11 +14,15 @@ class InfluxWriter(object):
         buffer_size (int): Buffer size in bytes
         max_buffer_age (int): Maximum time allowed for messages to remain in
             buffer before they are flushed [ms].
+        max_retries (int): Maximum number of write attempts on error. Setting
+            this value to -1 will lead to infinite retries.
     """
-    def __init__(self, buffer_size=1000000, max_buffer_age=30000):
+    def __init__(self, buffer_size=1000000, max_buffer_age=30000, max_retries=5):
+        self.max_buffer_age = int(max_buffer_age)
+        self.max_retries = int(max_retries)
+
         self._output_queue = asyncio.Queue()
         self._buffer = Buffer(buffer_size)
-        self.max_buffer_age = int(max_buffer_age)
         self._t_buffer = None
         self._stop = False
         self._tasks = []
@@ -121,21 +125,32 @@ class InfluxWriter(object):
         """
         logger.debug(f"Starting influx writer for bucket {bucket} on {host} ...")
         data = None
+        max_retries = 5
+        retry = 0
         while not self._stop or not self._output_queue.empty():
             if data is None:
                 logger.debug(f"Waiting for next chunk ...")
                 data = await self._output_queue.get()
+
             try:
                 async with InfluxDriver(host, bucket=bucket, **kwargs) as client:
                     logger.debug(f"Writing {len(data)} bytes of data to bucket "
                                  f"{bucket} ...")
                     await client.insert(data)
             except Exception as ex:
-                logger.error(f"While writing: {ex}. Retrying ...")
-                await asyncio.sleep(2)
-                continue
-
+                # TODO we need finer grained error control here
+                # Maybe no retry on 401 and different behaviour on connection
+                # problems ?
+                if self.max_retries < 0 or retry < self.max_retries:
+                    retry += 1
+                    logger.error(f"While writing: {ex}. Will retry ({retry}) ...")
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    logger.error(f"While writing: {ex}. Max retries exceeded."
+                                 f"Ignoring {len(data)} bytes of data")
             data = None
+            retry = 0
             self._output_queue.task_done()
         logger.debug("Writer for bucket {bucket} closed")
 
