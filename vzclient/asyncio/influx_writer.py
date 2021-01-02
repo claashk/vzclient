@@ -4,7 +4,7 @@ import asyncio
 from ..buffer import Buffer
 from .influx_driver import InfluxDriver
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("vzclient")
 
 
 class InfluxWriter(object):
@@ -152,7 +152,7 @@ class InfluxWriter(object):
             data = None
             retry = 0
             self._output_queue.task_done()
-        logger.debug("Writer for bucket {bucket} closed")
+        logger.debug(f"Writer for bucket {bucket} closed")
 
     def flush_buffer(self):
         """Copy buffer content to output queue and clear buffer

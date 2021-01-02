@@ -3,7 +3,7 @@ import logging
 import asyncio
 from vzclient.constants import now, timestamp
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("vzclient")
 
 
 class DeviceReader(object):
