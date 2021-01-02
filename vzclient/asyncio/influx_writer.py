@@ -126,7 +126,6 @@ class InfluxWriter(object):
         """
         logger.debug(f"Starting influx writer for bucket {bucket} on {host} ...")
         data = None
-        max_retries = 5
         retry = 0
         while not self._stop or not self._output_queue.empty():
             if data is None:
