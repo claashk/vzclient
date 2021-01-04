@@ -37,7 +37,7 @@ class DeviceReader(object):
                  **kwargs):
         self.read_device = reader
         self.use_device_time = use_device_time
-        self.sampling_interval = sampling_interval
+        self.sampling_interval = int(sampling_interval)
         self.interpolate = interpolate
         self.allowed_errors = allowed_errors
         self.name = name
@@ -92,9 +92,10 @@ class DeviceReader(object):
 
                 sleep_sec -= self.mean_exec_time
                 if sleep_sec < 0.:
-                    logger.warning("Mean read time for device {} exceeds "
-                                   "sampling interval by {} ms"
-                                   .format(self.name, -1000 * sleep_sec))
+                    logger.warning(f"Mean execution time "
+                                   f"({self.mean_exec_time:.3f} s) for device "
+                                   f"{self.name} exceeds sampling interval by "
+                                   f"{-1000 * sleep_sec:.0f} ms")
                     sleep_sec = 0.
             await asyncio.sleep(sleep_sec)
         self._stop = False
