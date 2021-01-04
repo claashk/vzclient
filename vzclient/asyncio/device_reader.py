@@ -84,8 +84,10 @@ class DeviceReader(object):
                     i = (self._t1 // self.sampling_interval)
                     t = i * self.sampling_interval
                     yield self.get_value(t)
-                    sleep_sec = 0.001 * ((i + 1) * self.sampling_interval + 50
-                                         - self._t1)  # 50 ms buffer
+                    # buffer to avoid sampling too early (5% of mean exec time)
+                    dtmin = 0.05 * self.mean_exec_time
+                    sleep_sec = dtmin + 0.001 * (
+                                (i + 1) * self.sampling_interval - self._t1)
                 else:
                     sleep_sec = 0.001 * self.sampling_interval
                     yield self.get_value()
