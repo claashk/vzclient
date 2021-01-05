@@ -7,8 +7,12 @@ from .influx_driver import InfluxDriver
 logger = logging.getLogger("vzclient")
 
 
-class InfluxWriter(object):
-    """Buffer input from a reader and transmit it in chunks to a consumer
+class InfluxHub(object):
+    """Relays information from various sources to an influx DB client
+
+    The influx hub receives information from various readers (sources) and
+    buffers them in an internal output queue until one or more writers relay the
+    buffered information to an influx DB client.
 
     Arguments:
         buffer_size (int): Buffer size in bytes
@@ -63,12 +67,13 @@ class InfluxWriter(object):
         task = asyncio.ensure_future(self._read(reader, **kwargs))
         self._tasks.append(task)
 
-    def start_writer(self, host, **kwargs):
+    def connect_writer(self, host, **kwargs):
         """Start a writer task
 
         Starts a writer which continuously writes chunks of data from the
-        internal output queue to the Influx database. At least one writer should
-        be started.
+        internal output queue to the Influx database. At least one writer is
+        required to consume the queue. More writer instances may be useful, if
+        the readers produce more input than one writer can consume.
 
         Arguments:
             host (str): Hostname of influx db
