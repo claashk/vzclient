@@ -62,6 +62,7 @@ class ModbusLogger:
                  default_precision=None,
                  measurement="volkszaehler",
                  tags=None,
+                 field_name="value",
                  api=None):
         if default_precision is None:
             default_precision = dict()
@@ -76,8 +77,9 @@ class ModbusLogger:
         d = default_precision if default_precision is not None else dict()
         self.default_precision = d
         self.measurement = measurement
-        self.api = api
         self.tags = tags if tags is not None else dict()
+        self.field_name = str(field_name)
+        self.api = api
 
     def connect_writer(self, **kwargs):
         """Connect InfluxDB writer to hub
@@ -129,6 +131,7 @@ class ModbusLogger:
         interpolate = kwargs.pop('interpolate', self.interpolate)
         measurement = str(kwargs.pop('measurement', self.measurement))
         max_gap = kwargs.pop('max_gap', self.max_gap)
+        field_name = kwargs.pop('field_name', self.field_name)
 
         for k in kwargs.keys():
             logger.warning(f"While connecting to {name} on modbus host {host}: "
@@ -146,7 +149,10 @@ class ModbusLogger:
             gen = compress_const(gen, int(1000 * max_gap))  # max_gap[s] -> ms
 
         logger.info(f"Connecting modbus reader {name} ({message}) at {host} ...")
-        self.hub.connect_reader(gen, measurement=measurement, tags=tags)
+        self.hub.connect_reader(gen,
+                                measurement=measurement,
+                                tags=tags,
+                                field_name=field_name)
 
     async def modbus_read(self, host, message=None, precision=None, **kwargs):
         """Wrapper function reading a modbus register
