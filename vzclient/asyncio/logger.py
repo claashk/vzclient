@@ -2,7 +2,6 @@
 import logging
 import uuid
 from .device_reader import DeviceReader
-from .influx_hub import InfluxHub
 from .compress import compress_const
 from ..constants import now, CHANNEL_TYPES
 
@@ -130,7 +129,7 @@ def log_modbus(hub,
         if message_id is None:
             message_id = str(message)
         device_id = device_id if device_id is not None else str(host)
-        uid = uuid.uuid3(uuid.NAMESPACE_DNS, f"{message_id}.{device_id}")
+        uid = str(uuid.uuid3(uuid.NAMESPACE_DNS, f"{message_id}.{device_id}"))
     if uid:
         tags['uuid'] = uid
 
