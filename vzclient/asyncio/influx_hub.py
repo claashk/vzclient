@@ -112,6 +112,8 @@ class InfluxHub(object):
             if self._t_buffer is None:
                 self._t_buffer = t
             self._buffer.write(prefix, f"{x} {t}\n".encode())
+            logger.debug(f"Buffer: ({len(self._buffer)} / "
+                         f"{self._buffer.capacity} bytes) used")
 
             if self._buffer.is_full():
                 self.flush_buffer()
@@ -168,3 +170,4 @@ class InfluxHub(object):
             data = bytes(self._buffer.data())
             self._buffer.clear()
             self._output_queue.put_nowait(data)
+
