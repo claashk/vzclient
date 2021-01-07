@@ -1,4 +1,6 @@
 import signal
+import asyncio
+from inspect import iscoroutinefunction
 
 
 class Service(object):
@@ -11,35 +13,58 @@ class Service(object):
               print("I am working")
           print("And now I am finished")
     """
-    def __init__(self):
-        self.run = True
+    def __init__(self, signals=None, callback=None, **kwargs):
+        self.cancel = False
         self.signum = None
         self.frame = None
 
-        self._sigint = None
+        self._saved_signals = dict()
         self._sigterm = None
+        self._result = None
+        if signals is None:
+            self._signals = [signal.SIGINT, signal.SIGTERM]
+        else:
+            self._signals = signals
+
+        self._callback = callback
+        self._args = kwargs
 
     def __enter__(self):
         self.enable()
         return self
 
+    async def __aenter__(self):
+        self.__enter__()
+        return self
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.disable()
 
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.__exit__(exc_type, exc_val, exc_tb)
+        if self.result is not None:
+            self.result = await self.result
+
     def enable(self):
-        self._sigint = signal.signal(signal.SIGINT, self.handle_signal)
-        self._sigterm = signal.signal(signal.SIGTERM, self.handle_signal)
+        self.disable()
+        for s in self._signals:
+            self._saved_signals[s] = signal.signal(s, self.handle_signal)
 
     def disable(self):
-        if self._sigint is not None:
-            signal.signal(signal.SIGINT, self._sigint)
-            self._sigint = None
-
-        if self._sigterm is not None:
-            signal.signal(signal.SIGINT, self._sigterm)
-            self._sigterm = None
+        while self._saved_signals:
+            s, f = self._saved_signals.popitem()
+            signal.signal(s, f)
 
     def handle_signal(self, signum, frame):
         self.signum = signum
         self.frame = frame
-        self.run = False
+        self.cancel = True
+
+        if self._callback is not None:
+            if iscoroutinefunction(self._callback):
+                self.result = asyncio.ensure_future(self._callback(**self._args))
+            else:
+                self.result = self._callback(**self._args)
+
+
+
