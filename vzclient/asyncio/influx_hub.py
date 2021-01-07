@@ -35,15 +35,20 @@ class InfluxHub(object):
         """Stop this relay instance
 
         Stops all readers, flushes remaining data to output queue and writes
-        data from the queue to Influx before stopping the writer.
+        data from the queue to Influx before stopping the writer(s).
+
+        The timeout argument is split between readers and writers. If only one
+        value is used, 20 % of the timeout will be allowed for readers and the
+        remaining 80% will be used for the writers. To override this behaviour
+        a tuple can be specified, in which case the first value of the tuple
+        will be used for readers and the second value will be used for the
+        writers. The total timeout is thus the sum of these values.
 
         Arguments:
              timeout (float or tuple): Timeout [s] before cancelling readers and
-                 writers. If timeout is a single value, the same timeout for
-                 readers and writers is used. If a tuple of two values is
-                 specified, then the first timeout is used for the readers and
-                 the second timeout is used for writers. The total timeout is
-                 always the sum of both timeouts!
+                 writers.  If a tuple of two values is specified, then the first
+                 element is used as reader timeout and the second timeout is
+                 used for the writers.
         """
         logger.info("Stopping Influx Hub ...")
 
