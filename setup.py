@@ -46,7 +46,8 @@ setup(
         'autobahn',
         'requests',
         'aiomysql',
-        'aioinflux'
+        'aioinflux',
+        'pyyaml'
     ],
     author='claashk',
     author_email='claashk@xxx',
