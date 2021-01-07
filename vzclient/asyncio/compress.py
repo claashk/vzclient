@@ -8,7 +8,7 @@ async def compress_const(aiterable, max_gap=None):
     specified, nodes are not deleted, if they
 
     Arguments:
-        iterable (async interable): Async generator
+        iterable (async interable): Async generator yielding chunks of data
         max_gap (int): Maximum distance between neighbouring nodes.
 
     Yield:

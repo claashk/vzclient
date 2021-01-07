@@ -28,7 +28,8 @@ class InfluxHub(object):
         self._output_queue = asyncio.Queue()
         self._buffer = Buffer(buffer_size)
         self._t_buffer = None
-        self._tasks = []
+        self._readers = []
+        self._writers = []
 
     async def stop(self, timeout=300):
         """Stop this relay instance
@@ -37,21 +38,33 @@ class InfluxHub(object):
         data from the queue to Influx before stopping the writer.
 
         Arguments:
-             timeout (int): Timeout [s] before cancelling readers and writers.
+             timeout (float or tuple): Timeout [s] before cancelling readers and
+                 writers. If timeout is a single value, the same timeout for
+                 readers and writers is used. If a tuple of two values is
+                 specified, then the first timeout is used for the readers and
+                 the second timeout is used for writers. The total timeout is
+                 always the sum of both timeouts!
         """
-        logger.debug("Stopping Influx writer ...")
-        for t in self._tasks:
-            t.cancel()
+        logger.info("Stopping Influx Hub ...")
 
-        dt = min(2, timeout)
-        done, pending = await asyncio.wait(self._tasks, timeout=dt)
-        timeout -= dt
+        if not isinstance(timeout, (tuple, list)):
+            t1 = 0.2 * timeout
+            t2 = timeout - t1
+            timeout = (t1, t2)
 
-        while pending and timeout >= 0:
-            logger.debug(f"Waiting for {len(pending)} pending tasks ...")
-            done, pending = await asyncio.wait(pending, timeout=dt)
-            timeout -= dt
-        logger.warning(f"Unable to cancel {len(pending)} tasks")
+        for t, name in zip(timeout, ("readers", "writers")):
+            tasks = getattr(self, f"_{name}")
+            for task in tasks:
+                task.cancel()
+            logger.debug(f"Closing {name} ...")
+            done, pending = await asyncio.wait(tasks, timeout=t)
+            for task in done:
+                try:
+                    await task
+                except Exception as ex:
+                    logger.error(f"{ex}")
+            if pending:
+                logger.warning(f"Failed to close {len(pending)} {name}")
         return
 
     def connect_reader(self, reader, **kwargs):
@@ -65,7 +78,7 @@ class InfluxHub(object):
                 :meth:`DeviceReader.wrap_reader`
         """
         task = asyncio.ensure_future(self.wrap_reader(reader, **kwargs))
-        self._tasks.append(task)
+        self._readers.append(task)
 
     def connect_writer(self, host, **kwargs):
         """Start a writer task
@@ -81,7 +94,7 @@ class InfluxHub(object):
                 :class:`~vzclient.asyncio.InfluxDriver`
         """
         task = asyncio.ensure_future(self.wrap_writer(host, **kwargs))
-        self._tasks.append(task)
+        self._writers.append(task)
 
     async def wrap_reader(self,
                           reader,
@@ -105,8 +118,8 @@ class InfluxHub(object):
         prefix = InfluxDriver.get_prefix(measurement=measurement,
                                          tags=tags,
                                          field_name=field_name)
-        logger.debug(f"Started reader for measurement {measurement} with tags "
-                     f"{tags} ...")
+        name = tags.get("title", "<unknown>")
+        logger.info(f"Started {name} reader for measurement {measurement} ...")
 
         try:
             async for t, x in reader:
@@ -120,10 +133,10 @@ class InfluxHub(object):
                     self.flush_buffer()
                 elif t - self._t_buffer > self.max_buffer_age:
                     self.flush_buffer()
+            logger.error(f"{name} reader died unexpectedly")
         except asyncio.CancelledError:
-            logger.debug(f"Reader ({tags}) cancelled. Closing ...")
             self.flush_buffer()
-            return
+            logger.debug(f"{name} reader cancelled.")
 
     async def wrap_writer(self, host, bucket='volkszaehler', **kwargs):
         """Task executed for each data base writer
@@ -156,6 +169,8 @@ class InfluxHub(object):
                         await client.insert(data)
                         data = None
                         self._output_queue.task_done()
+                except asyncio.CancelledError:
+                    raise
                 except Exception as ex:
                     # TODO we need finer grained error control here
                     # Maybe no retry on 401 and different behaviour on connection
@@ -171,9 +186,9 @@ class InfluxHub(object):
                         data = None
                         self._output_queue.task_done()
             except asyncio.CancelledError:
-                logger.info(f"Writer for bucket {bucket} cancelled.")
+                logger.info(f"Writer for bucket {bucket} cancelled. Closing...")
                 cancel = True
-        logger.debug(f"Writer for bucket {bucket} closed")
+        logger.debug(f"Writer for bucket {bucket} on {host} closed")
 
     def flush_buffer(self):
         """Copy buffer content to output queue and clear buffer
