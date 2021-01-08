@@ -20,7 +20,6 @@ class Service(object):
 
         self._saved_signals = dict()
         self._sigterm = None
-        self._result = None
         if signals is None:
             self._signals = [signal.SIGINT, signal.SIGTERM]
         else:
@@ -28,6 +27,11 @@ class Service(object):
 
         self._callback = callback
         self._args = kwargs
+        self._callback_result = None
+
+    @property
+    def callback_result(self):
+        return self._callback_result
 
     def __enter__(self):
         self.enable()
@@ -42,8 +46,8 @@ class Service(object):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.__exit__(exc_type, exc_val, exc_tb)
-        if self.result is not None:
-            self.result = await self.result
+        if self._callback_result is not None:
+            self._callback_result = await self._callback_result
 
     def enable(self):
         self.disable()
@@ -62,9 +66,10 @@ class Service(object):
 
         if self._callback is not None:
             if iscoroutinefunction(self._callback):
-                self.result = asyncio.ensure_future(self._callback(**self._args))
+                self._callback_result = asyncio.ensure_future(
+                                            self._callback(**self._args))
             else:
-                self.result = self._callback(**self._args)
+                self._callback_result = self._callback(**self._args)
 
 
 
