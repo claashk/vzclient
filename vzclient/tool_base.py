@@ -1,4 +1,4 @@
-import logging, asyncio, argparse, io
+import logging, asyncio, argparse
 from inspect import iscoroutinefunction
 from copy import deepcopy
 import yaml
@@ -11,9 +11,8 @@ class ToolBase:
     run as service and which are configured via a (yaml) log file.
     """
     default_config = dict()
-    def __init__(self,
-                 logger=None,
-                 description=""):
+
+    def __init__(self, logger=None, description=""):
         self.log = logger if logger is not None else logging.getLogger()
         self.parser = argparse.ArgumentParser(description=description)
         self.config = dict()
@@ -107,6 +106,8 @@ class ToolBase:
 
         Arguments:
             path (str): Path to config file
+            default_config(dict): Default configuration. Missing configuration
+                options are taken from this dictionary.
 
         Return:
             tuple: Three dictionaries containing default options, default source
