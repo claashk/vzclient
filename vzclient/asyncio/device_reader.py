@@ -15,8 +15,8 @@ class DeviceReader(object):
             and the device reading at this timestamp. Instead of the timestamp
             a :class:`datetime.datetime` object or ``None`` are permissible, too.
         use_device_time(bool): If ``True``, the wrapper uses the native time read
-            from the device, if not ``None``. Otherwise the local server utc time
-            is used.
+            from the device, if not ``None``. Otherwise the local server UTC is
+            used.
         sampling_interval (int): Desired sampling interval [ms].
         interpolate (bool): If ``True``, sampled values will be interpolated at
             integer multiples of the sampling interval. If ``False``, values
@@ -25,7 +25,8 @@ class DeviceReader(object):
             number n will cause the reader to abort on the n-th error. Zero
             causes abort on the first error. A negative value causes the reader
             to ignore all errors.
-        **kwarger: Keyword arguments passed verbatim to reader on each call
+        name (str): Device name for this reader used in log messages.
+        **kwargs: Keyword arguments passed verbatim to reader on each call
     """
     def __init__(self,
                  reader,
