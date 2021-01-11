@@ -30,7 +30,8 @@ class ToolBase:
         self.configure_parser()
         cfg = self.parse_cmd_line_args(cmd_line_args)
         self.configure_logging(verbose_mode=cfg.verbose, log_file=cfg.logfile)
-        self.parse_config_file(cfg.path[0], self.default_config)
+        self.parse_config_file(path=cfg.path[0],
+                               default_config=self.default_config)
         return 0
 
     def run(self, func=None, **kwargs):
@@ -92,12 +93,20 @@ class ToolBase:
         if verbose_mode > 3:
             self.debug = True
 
-        self.log.setLevel(log_level)
         if log_file:
             h = logging.FileHandler(log_file, 'a')
             for handler in self.log.handlers:
                 self.log.removeHandler(handler)
-            self.log.addHandler(h)
+        elif not self.log.handlers:
+            h = logging.StreamHandler()
+        self.log.addHandler(h)
+
+        fmt = logging.Formatter(fmt=logging.BASIC_FORMAT)
+        for h in self.log.handlers:
+            if h.formatter is None:
+                h.setFormatter(fmt)
+
+        self.log.setLevel(log_level)
 
         return third_party_log_level
 
