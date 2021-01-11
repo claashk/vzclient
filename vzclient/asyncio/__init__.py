@@ -5,4 +5,4 @@ from .compress import compress_const
 from .database_copy import DatabaseCopy
 from .device_reader import DeviceReader
 from .influx_hub import InfluxHub
-from .logger import log_modbus
+from .logger import InfluxLogger
