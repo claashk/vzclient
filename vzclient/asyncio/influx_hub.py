@@ -30,6 +30,14 @@ class InfluxHub(object):
         self._t_buffer = None
         self._readers = []
         self._writers = []
+        self._future = None
+
+    def __await__(self):
+        if self._future is None:
+            loop = asyncio.get_event_loop()
+            self._future = loop.create_future()
+            self._future.set_exception(RuntimeError("Hub was never started"))
+        return self._future.__await__()
 
     async def stop(self, timeout=300):
         """Stop this relay instance
@@ -57,6 +65,7 @@ class InfluxHub(object):
             t2 = timeout - t1
             timeout = (t1, t2)
 
+        errors = []
         for t, name in zip(timeout, ("readers", "writers")):
             tasks = getattr(self, f"_{name}")
             for task in tasks:
@@ -69,7 +78,16 @@ class InfluxHub(object):
                 except Exception as ex:
                     logger.error(f"{ex}")
             if pending:
-                logger.warning(f"Failed to close {len(pending)} {name}")
+                msg = f"Failed to close {len(pending)} {name}"
+                logger.warning(msg)
+                errors.append(msg)
+
+        if self._future is not None:
+            if errors:
+                self._future.set_exception(TimeoutError("\n".join(errors)))
+            elif not self._future.cancelled():
+                self._future.set_result(True)
+
         return
 
     def connect_reader(self, reader, **kwargs):
@@ -98,6 +116,9 @@ class InfluxHub(object):
             **kwargs: Keyword arguments passed verbatim to
                 :class:`~vzclient.asyncio.InfluxDriver`
         """
+        if self._future is None or self._future.done():
+            loop = asyncio.get_event_loop()
+            self._future = loop.create_future()
         task = asyncio.ensure_future(self.wrap_writer(host, **kwargs))
         self._writers.append(task)
 
@@ -111,7 +132,7 @@ class InfluxHub(object):
         Do not execute this directly. Use :meth:`connect_reader` instead.
 
         Arguments:
-            reader (async generator): Asynchronous generator yielding pairs of
+            reader (async generator): Asynchronous generator yielding
                 (timestamp, value) pairs. See
                 :class:`~vzclient.asyncio.DeviceReader` for an example.
             measurement (str): Measurement name to use by influx DB
